@@ -22,7 +22,8 @@ class MultiplayerGame:
         self.message_id = None  # For updating the game message
         self.group_message_id = None  # For updating status in group
         self.betting_stage = False  # Whether we're currently in the betting stage
-        self.timer_seconds = 0  # Set to 0 since we're not using timers
+        self.timer_seconds = 180  # 3 minutes timeout if no one joins
+        self.last_player_join_time = time.time()  # Track when the last player joined
         
     def add_player(self, user_id: int, username: str) -> bool:
         """Add a player to the game. Returns True if player was added."""
@@ -44,6 +45,8 @@ class MultiplayerGame:
                 "choice": None,
                 "bet": 0
             }
+            # Update the last player join time when a new player joins
+            self.last_player_join_time = time.time()
             return True
         # Player already exists but we'll count it as success
         return True
@@ -64,8 +67,18 @@ class MultiplayerGame:
         return False
             
     def is_timer_expired(self) -> bool:
-        """Check if the game timer has expired - always returns False since we removed timers"""
-        return False
+        """Check if the game timer has expired - returns True if no one has joined for timer_seconds"""
+        # If game already started, no timeout needed
+        if self.started:
+            return False
+            
+        # Check if we have more than one player - if so, game should start automatically
+        if len(self.players) > 1:
+            return False
+            
+        # If only one player (the creator) has joined and the timer has expired, return True
+        elapsed_since_last_join = time.time() - self.last_player_join_time
+        return len(self.players) == 1 and elapsed_since_last_join > self.timer_seconds
             
     def make_bet(self, user_id: int, bet_amount: int) -> bool:
         """Record a player's bet. Returns True if successful."""
@@ -328,15 +341,21 @@ class GameManager:
     def clean_up_expired_games(self, max_age_seconds: int = 300) -> int:
         """Remove expired games. Returns the number of games removed."""
         expired_chats = []
+        timed_out_chats = []
         
         for chat_id, game in self.games.items():
+            # Check for overall game expiration (inactive for too long)
             if game.is_expired(max_age_seconds):
                 expired_chats.append(chat_id)
+            # Check for game timeout (no one joined for timer_seconds)
+            elif game.is_timer_expired():
+                timed_out_chats.append(chat_id)
                 
-        for chat_id in expired_chats:
+        # End all expired or timed out games
+        for chat_id in expired_chats + timed_out_chats:
             self.end_game(chat_id)
             
-        return len(expired_chats)
+        return len(expired_chats) + len(timed_out_chats)
 
 
 # Singleton instance of the game manager

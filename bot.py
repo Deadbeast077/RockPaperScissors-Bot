@@ -989,8 +989,48 @@ def create_application():
     application.add_handler(CallbackQueryHandler(multiplayer_choice_callback, pattern='^mp_'))
     application.add_handler(CallbackQueryHandler(betting_callback, pattern='^bet_'))
     
-    # Clean up expired games every minute
-    # This would be done with job queue in a production bot
+    # Add a function to handle timeouts
+    async def check_game_timeouts(context: ContextTypes.DEFAULT_TYPE):
+        """Check for timed out games and notify users"""
+        game_manager = get_game_manager()
+        
+        # Before cleaning up, track games that will be removed due to timer expiration
+        timed_out_games = []
+        for chat_id, game in game_manager.games.items():
+            if game.is_timer_expired():
+                timed_out_games.append((chat_id, game.creator_name, game.group_message_id))
+                
+        # Clean up all expired games
+        expired_count = game_manager.clean_up_expired_games()
+        
+        if expired_count > 0:
+            logger.info(f"Cleaned up {expired_count} expired or timed out games")
+            
+        # Send timeout notifications for each timed out game
+        from responses import game_timeout_message
+        for chat_id, creator_name, message_id in timed_out_games:
+            try:
+                # Try to edit the existing game message if available
+                if message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=game_timeout_message(creator_name),
+                        parse_mode="HTML"
+                    )
+                else:
+                    # Otherwise send a new message
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=game_timeout_message(creator_name),
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.error(f"Error sending timeout notification: {e}")
+    
+    # Clean up expired games every 30 seconds
+    job_queue = application.job_queue
+    job_queue.run_repeating(check_game_timeouts, interval=30, first=10)
     
     return application
 

@@ -557,6 +557,9 @@ def not_in_game_message():
 def game_already_started_message():
     return "⚠️ <b>BATTLE UNDERWAY!</b> The clash has already begun - no retreat is possible now!"
 
+def game_timeout_message(creator_name):
+    return f"<b>⏰ GAME TIMEOUT! ⏰</b>\n\nNo one joined {creator_name}'s game for 3 minutes, so the arena has closed. Try creating a new game when more players are available!"
+
 def choose_move_message():
     messages = [
         "⚡ <b>MOMENT OF TRUTH!</b> ⚡ Choose your weapon of destiny!",
