@@ -1,14 +1,28 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "repl-nix-workspace"
-version = "0.1.0"
-description = "Add your description here"
-requires-python = ">=3.11"
+name = "rockpaperscissors-bot"
+version = "1.0.0"
+description = "A dynamic Telegram bot for playing Rock Paper Scissors with engaging multiplayer interactions"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT"}
 dependencies = [
-    "email-validator>=2.2.0",
-    "flask>=3.1.0",
-    "flask-sqlalchemy>=3.1.1",
-    "gunicorn>=23.0.0",
-    "psycopg2-binary>=2.9.10",
-    "python-telegram-bot[job-queue]==20.7",
-    "telegram>=0.0.1",
+    "python-telegram-bot[job-queue]>=20.7",
+    "apscheduler>=3.10.4",
+    "pytz>=2023.3",
+    "tzlocal>=5.0.1",
+    "python-dotenv>=1.0.0",
 ]
+
+[project.scripts]
+rockpaperscissors-bot = "main:app"
+
+[tool.setuptools]
+packages = ["find:"]
+
+[tool.black]
+line-length = 88
+target-version = ["py37"]

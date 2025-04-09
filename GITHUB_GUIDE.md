@@ -63,14 +63,22 @@ git push -u origin master
 ## Important Notes
 
 1. Make sure your `.gitignore` file is properly set up to exclude sensitive information like:
-   - Bot tokens and API keys
+   - Bot tokens and API keys (`.env` file)
    - Database files
    - User-specific configuration files
    - Log files
 
-2. NEVER push your `TELEGRAM_TOKEN` or any API keys to GitHub
+2. NEVER push your actual `.env` file to GitHub. Only push the `.env.example` template. Your `.gitignore` should have:
+   ```
+   # Environment variables
+   .env
+   .env.*
+   !.env.example
+   ```
 
-3. For deployment, consider:
+3. NEVER push your `TELEGRAM_TOKEN` or any API keys to GitHub
+
+4. For deployment, consider:
    - Setting up environment variables on your hosting platform
    - Using GitHub Actions for continuous deployment
 

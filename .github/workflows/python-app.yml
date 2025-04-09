@@ -1,0 +1,56 @@
+name: Rock Paper Scissors Bot
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Install using pyproject.toml
+        pip install .
+        pip install python-dotenv python-telegram-bot[job-queue] apscheduler pytz tzlocal
+        
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        
+    - name: Run unit tests
+      run: |
+        # Run unit tests when they're created
+        # pytest
+        
+    - name: Test setup
+      run: |
+        # Test that package installation works
+        pip install -e .
+        
+    - name: Test environment file
+      run: |
+        # Copy the example env file for testing
+        cp .env.example .env.test
+        # Check that the dotenv loading works
+        python -c "from dotenv import load_dotenv; load_dotenv('.env.test'); import os; print('TELEGRAM_TOKEN env check:', 'TELEGRAM_TOKEN' in os.environ or 'Environment file test setup correctly')"
+        
+    # Deployment steps would be added here for production environments

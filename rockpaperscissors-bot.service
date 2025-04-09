@@ -1,0 +1,21 @@
+[Unit]
+Description=Rock Paper Scissors Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/path/to/RockPaperScissors-Bot
+ExecStart=/path/to/python3 /path/to/RockPaperScissors-Bot/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Optional: Uncomment these if you want to define resource limits
+# LimitNOFILE=4096
+# MemoryLimit=256M
+# CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

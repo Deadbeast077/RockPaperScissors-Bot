@@ -3,6 +3,12 @@ import logging
 import asyncio
 import threading
 import subprocess
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Import after loading environment variables
 from bot import start_bot
 
 # Set up logging
@@ -29,9 +35,9 @@ def start_bot_process():
         with open(bot_lock_file, 'w') as f:
             f.write(str(os.getpid()))
         
-        # Run the bot script directly
+        # Run the bot script directly with dotenv
         bot_process = subprocess.Popen(["python", "-c", 
-            "from bot import start_bot; start_bot()"])
+            "from dotenv import load_dotenv; load_dotenv(); from bot import start_bot; start_bot()"])
         return "Bot started as a separate process"
     except Exception as e:
         # Clean up lock file if startup fails

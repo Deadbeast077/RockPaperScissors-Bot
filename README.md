@@ -41,10 +41,12 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
    - See the [dependencies.md](dependencies.md) file for required packages
    - Install them using pip:
      ```bash
-     pip install "python-telegram-bot[job-queue]>=20.7" apscheduler>=3.10.4
+     pip install "python-telegram-bot[job-queue]>=20.7" apscheduler>=3.10.4 pytz>=2023.3 tzlocal>=5.0.1 python-dotenv>=1.0.0
      ```
 
-3. **Set up Environment Variable**:
+3. **Set up Environment Variable** (Two Options):
+
+   **Option A: Direct Environment Variable:**
    - Set the `TELEGRAM_TOKEN` environment variable to your bot token:
      ```bash
      # For Linux/macOS
@@ -56,7 +58,17 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
      # For Windows PowerShell
      $env:TELEGRAM_TOKEN="your_bot_token_here"
      ```
-   - For deployment on hosting platforms, set this as a secret environment variable
+
+   **Option B: Using .env File (Recommended):**
+   - Install python-dotenv: `pip install python-dotenv`
+   - Create a `.env` file in the project root with your token:
+     ```
+     TELEGRAM_TOKEN=your_bot_token_here
+     DEBUG=True
+     ```
+   - The bot automatically loads this file using python-dotenv
+   
+   - For deployment on hosting platforms, set this as a secret environment variable or use a .env file
 
 4. **Run the Bot**:
    - Execute `python main.py` to start the bot
