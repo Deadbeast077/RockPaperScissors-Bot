@@ -163,14 +163,14 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Game cancelled. Type /play to start a new game!")
     return ConversationHandler.END
 
-def start_bot():
-    """Start the bot."""
+def create_application():
+    """Create the application instance."""
     if not TELEGRAM_TOKEN:
         logger.error("No Telegram token provided. Please set the TELEGRAM_TOKEN environment variable.")
         logger.info("To create a bot, use BotFather in Telegram and set:")
         logger.info("- Bot name: RockPaperScissors Bot")
         logger.info("- Bot username: @RPLSLBot")
-        return
+        return None
     
     # Create application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -194,9 +194,37 @@ def start_bot():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(conv_handler)
     
+    return application
+
+def start_bot():
+    """Start the bot."""
+    # Create the application
+    application = create_application()
+    if not application:
+        return
+    
     # Start the Bot
     logger.info("Starting Telegram Bot")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+
+async def start_bot_async():
+    """Start the bot asynchronously."""
+    # Create the application
+    application = create_application()
+    if not application:
+        return
+    
+    # Start the Bot asynchronously
+    logger.info("Starting Telegram Bot asynchronously")
+    try:
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Error starting bot asynchronously: {e}")
 
 if __name__ == "__main__":
     start_bot()
