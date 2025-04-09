@@ -191,6 +191,30 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user stats when the command /stats is issued."""
     user_id = update.effective_user.id
     mode = None
+    reply_to_message = update.message.reply_to_message
+    
+    # Check if the command is replying to another user's message
+    if reply_to_message and reply_to_message.from_user.id != user_id:
+        # The user wants to see stats of the person they replied to
+        replied_user_id = reply_to_message.from_user.id
+        replied_username = reply_to_message.from_user.username or reply_to_message.from_user.first_name
+        
+        # Check if this user exists in our stats database
+        stats = get_user_stats(replied_user_id, mode)
+        
+        # Check if the user has played any games
+        if stats.get('total_games', 0) > 0 or stats.get('solo', {}).get('total_games', 0) > 0 or stats.get('multiplayer', {}).get('total_games', 0) > 0:
+            await update.message.reply_text(
+                stats_message(stats, mode),
+                parse_mode="HTML"
+            )
+        else:
+            # User found but hasn't played any games
+            await update.message.reply_text(
+                player_not_found_message(replied_username),
+                parse_mode="HTML"
+            )
+        return
     
     # Get the targeted username if provided
     if context.args:

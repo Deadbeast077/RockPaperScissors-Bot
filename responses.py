@@ -20,6 +20,7 @@ The legendary battleground where legends are forged!
 /join - Enter a multiplayer arena in your group
 /stats - Reveal your legendary battle record
 /stats [username] - View another warrior's legend
+Reply with /stats - View stats of a replied-to warrior
 /help - Discover the ancient rules of combat
 /cancel - Retreat from battle (but heroes never quit!)
 
@@ -49,6 +50,7 @@ HELP_MESSAGE = """
 /stats [username] - View another warrior's battle record
 /stats [username] solo - View solo stats only
 /stats [username] multiplayer - View multiplayer stats only
+• Reply to a player's message with /stats to see their legend
 
 *🛡️ SPECIAL FEATURES:*
 • One-game restriction: Warriors can only battle in one arena at a time
@@ -155,61 +157,107 @@ def stats_message(stats, mode=None):
         
         mode_title = "🎮 SOLO BATTLES" if mode == 'solo' else "🔥 MULTIPLAYER BATTLES"
         message += f"<b>{mode_title}</b>\n"
-    else:
-        # Show combined stats
-        wins = stats.get('wins', 0)
-        losses = stats.get('losses', 0)
-        draws = stats.get('draws', 0)
-        total_games = stats.get('total_games', 0)
-        win_percentage = stats.get('win_percentage', 0.0)
-        current_streak = stats.get('current_streak', 0)
-        best_streak = stats.get('best_streak', 0)
         
-        message += f"<b>⚡ COMBINED BATTLE RECORD</b>\n"
-    
-    # Common stats section
-    message += f"<b>⚔️ BATTLES FOUGHT:</b> {total_games}\n"
-    message += f"<b>🌟 VICTORIES:</b> {wins}\n"
-    message += f"<b>💔 DEFEATS:</b> {losses}\n"
-    message += f"<b>⚖️ STANDOFFS:</b> {draws}\n"
-    message += f"<b>📊 TRIUMPH RATE:</b> {win_percentage}%\n"
-    
-    # Add streak information with epic styling
-    if current_streak > 0:
-        message += f"<b>🔥 CURRENT STREAK:</b> {current_streak} (Unstoppable!)\n"
-    
-    if best_streak > 0:
-        message += f"<b>👑 LEGENDARY STREAK:</b> {best_streak}\n"
-    
-    # If we're showing all stats, also include the breakdowns
-    if not mode:
+        # Mode-specific stats
+        message += f"<b>⚔️ BATTLES FOUGHT:</b> {total_games}\n"
+        message += f"<b>🌟 VICTORIES:</b> {wins}\n"
+        message += f"<b>💔 DEFEATS:</b> {losses}\n"
+        message += f"<b>⚖️ STANDOFFS:</b> {draws}\n"
+        message += f"<b>📊 TRIUMPH RATE:</b> {win_percentage}%\n"
+        
+        # Add streak information with epic styling
+        if current_streak > 0:
+            message += f"<b>🔥 CURRENT STREAK:</b> {current_streak} (Unstoppable!)\n"
+        
+        if best_streak > 0:
+            message += f"<b>👑 LEGENDARY STREAK:</b> {best_streak}\n"
+    else:
+        # Get both types of stats
         solo_stats = stats.get('solo', {})
         multi_stats = stats.get('multiplayer', {})
         
-        # Add solo stats summary if played any solo games
-        if solo_stats.get('total_games', 0) > 0:
-            message += f"\n<b>🎮 SOLO STATS:</b> {solo_stats.get('wins', 0)}W - {solo_stats.get('losses', 0)}L - {solo_stats.get('draws', 0)}D "
-            message += f"({solo_stats.get('win_percentage', 0.0)}%)\n"
+        # Solo stats section
+        solo_total = solo_stats.get('total_games', 0)
+        if solo_total > 0:
+            message += f"<b>🎮 SOLO BATTLE RECORD</b>\n"
+            message += f"<b>⚔️ BATTLES FOUGHT:</b> {solo_total}\n"
+            message += f"<b>🌟 VICTORIES:</b> {solo_stats.get('wins', 0)}\n"
+            message += f"<b>💔 DEFEATS:</b> {solo_stats.get('losses', 0)}\n"
+            message += f"<b>⚖️ STANDOFFS:</b> {solo_stats.get('draws', 0)}\n"
+            message += f"<b>📊 TRIUMPH RATE:</b> {solo_stats.get('win_percentage', 0.0)}%\n"
             
-        # Add multiplayer stats summary if played any multiplayer games
-        if multi_stats.get('total_games', 0) > 0:
-            message += f"<b>👥 MULTIPLAYER STATS:</b> {multi_stats.get('wins', 0)}W - {multi_stats.get('losses', 0)}L - {multi_stats.get('draws', 0)}D "
-            message += f"({multi_stats.get('win_percentage', 0.0)}%)\n"
+            # Add streak information
+            if solo_stats.get('current_streak', 0) > 0:
+                message += f"<b>🔥 CURRENT STREAK:</b> {solo_stats.get('current_streak', 0)} (Unstoppable!)\n"
+            
+            if solo_stats.get('best_streak', 0) > 0:
+                message += f"<b>👑 LEGENDARY STREAK:</b> {solo_stats.get('best_streak', 0)}\n"
+        
+        # Add multiplayer stats section
+        multi_total = multi_stats.get('total_games', 0)
+        if multi_total > 0:
+            # Add a separator if we showed solo stats
+            if solo_total > 0:
+                message += f"\n<b>━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+                
+            message += f"<b>🔥 MULTIPLAYER BATTLE RECORD</b>\n"
+            message += f"<b>⚔️ BATTLES FOUGHT:</b> {multi_total}\n"
+            message += f"<b>🌟 VICTORIES:</b> {multi_stats.get('wins', 0)}\n"
+            message += f"<b>💔 DEFEATS:</b> {multi_stats.get('losses', 0)}\n"
+            message += f"<b>⚖️ STANDOFFS:</b> {multi_stats.get('draws', 0)}\n"
+            message += f"<b>📊 TRIUMPH RATE:</b> {multi_stats.get('win_percentage', 0.0)}%\n"
+            
+            # Add streak information
+            if multi_stats.get('current_streak', 0) > 0:
+                message += f"<b>🔥 CURRENT STREAK:</b> {multi_stats.get('current_streak', 0)} (Unstoppable!)\n"
+            
+            if multi_stats.get('best_streak', 0) > 0:
+                message += f"<b>👑 LEGENDARY STREAK:</b> {multi_stats.get('best_streak', 0)}\n"
+        
+        # If neither stats exist, show a message
+        if solo_total == 0 and multi_total == 0:
+            message += "<b>⚔️ NO BATTLES FOUGHT YET!</b>\n"
+            message += "This warrior has yet to prove their mettle in the arena!\n"
     
     message += "\n"
     
+    # Get current stats for the epic comment (from most recent section displayed)
+    if mode and mode in ['solo', 'multiplayer']:
+        mode_stats = stats.get(mode, {})
+        comment_streak = mode_stats.get('current_streak', 0)
+        comment_best_streak = mode_stats.get('best_streak', 0)
+        comment_win_rate = mode_stats.get('win_percentage', 0)
+    else:
+        # In the default view, use whichever mode has better stats for the comment
+        solo_stats = stats.get('solo', {})
+        multi_stats = stats.get('multiplayer', {})
+        
+        # Choose the better streak between solo and multiplayer for the comment
+        solo_current = solo_stats.get('current_streak', 0)
+        multi_current = multi_stats.get('current_streak', 0)
+        comment_streak = max(solo_current, multi_current)
+        
+        solo_best = solo_stats.get('best_streak', 0)
+        multi_best = multi_stats.get('best_streak', 0)
+        comment_best_streak = max(solo_best, multi_best)
+        
+        # Use the better win rate for the comment
+        solo_win_rate = solo_stats.get('win_percentage', 0)
+        multi_win_rate = multi_stats.get('win_percentage', 0)
+        comment_win_rate = max(solo_win_rate, multi_win_rate)
+    
     # Add a supercool comment based on stats
-    if current_streak >= 5:
+    if comment_streak >= 5:
         message += "🌋 <b>GODLIKE!</b> Mere mortals tremble before your power! 🌋"
-    elif current_streak >= 3:
+    elif comment_streak >= 3:
         message += "⚡ <b>DOMINATING!</b> Your enemies fall before your might! ⚡"
-    elif best_streak >= 5:
+    elif comment_best_streak >= 5:
         message += "💫 <b>LEGENDARY STATUS!</b> Bards sing tales of your exploits! 💫"
-    elif win_percentage >= 75:
+    elif comment_win_rate >= 75:
         message += "👑 <b>SUPREME TACTICIAN!</b> Your strategic mind has no equal! 👑"
-    elif win_percentage >= 50:
+    elif comment_win_rate >= 50:
         message += "🔥 <b>RISING CHAMPION!</b> Your skill grows with each battle! 🔥"
-    elif win_percentage >= 25:
+    elif comment_win_rate >= 25:
         message += "⚔️ <b>BATTLE-HARDENED WARRIOR!</b> Experience is forging your legend! ⚔️"
     else:
         message += "🌟 <b>DESTINY AWAITS!</b> Every legend begins with perseverance! 🌟"
