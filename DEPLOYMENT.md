@@ -13,7 +13,7 @@ This guide explains how to deploy your Rock Paper Scissors Telegram Bot on a VPS
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/RockPaperScissors-Bot.git
+git clone https://github.com/Deadbeast077/RockPaperScissors-Bot.git
 cd RockPaperScissors-Bot
 ```
 
