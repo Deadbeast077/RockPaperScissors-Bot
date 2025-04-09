@@ -64,7 +64,8 @@ HELP_MESSAGE = """
 <b>🛡️ SPECIAL FEATURES:</b>
 • One-game restriction: Warriors can only battle in one arena at a time
 • Quick-join: Players can make choices even without private messaging the bot first
-• Virtual currency: Earn coins in battles to place multiplayer bets
+• Betting system: Place wagers on multiplayer battles to win more coins
+• Virtual currency: Earn coins in battles - winners get rewards, losers lose bets
 • Game history: Track your last 10 epic encounters
 
 <b>🛡️ GENERAL COMMANDS:</b>
@@ -204,6 +205,13 @@ def currency_message(currency):
     """
     message = "<b>💰 TREASURE VAULT 💰</b>\n"
     message += f"<b>Current Balance:</b> {currency} coins\n\n"
+    
+    # Add information about betting
+    message += "<b>BETTING MECHANICS:</b>\n"
+    message += "• Winners receive their bet plus a share of losers' bets\n"
+    message += "• Winners without bets still earn 5 coins\n"
+    message += "• Losers forfeit their bet to winners\n"
+    message += "• Draws allow players to keep their bets\n\n"
     
     if currency <= 0:
         message += "<i>Your coffers are empty, brave warrior! Keep playing to earn more coins!</i>\n"
@@ -388,49 +396,31 @@ Use /join to accept the challenge and prove your worth!
 def multiplayer_game_status(game):
     players = game.get_players_string()
     
+    # Calculate total bets for the game
+    total_bets = sum(player_data.get("bet", 0) for player_id, player_data in game.players.items())
+    betting_info = f"\n\n💰 <b>TREASURY POOL:</b> {total_bets} coins" if total_bets > 0 else ""
+    
     if game.started:
-        # Calculate remaining time if timer is active
+        # We've removed the timer functionality
         timer_msg = ""
-        if game.timer_seconds > 0 and game.start_time:
-            elapsed = time.time() - game.start_time
-            remaining = max(0, game.timer_seconds - elapsed)
-            
-            if remaining > 0:
-                minutes = int(remaining) // 60
-                seconds = int(remaining) % 60
-                
-                if minutes > 0:
-                    timer_msg = f"\n\n⏱️ <b>TIME REMAINING:</b> {minutes}m {seconds}s ⏱️"
-                else:
-                    timer_msg = f"\n\n⏱️ <b>TIME REMAINING:</b> {seconds}s ⏱️"
-            else:
-                timer_msg = "\n\n⏱️ <b>TIME'S ALMOST UP!</b> ⏱️"
         
         message = f"""
 🏟️ <b>BATTLE IN PROGRESS!</b> 🏟️
 
 <b>WARRIORS IN THE ARENA:</b>
-{players}{timer_msg}
+{players}{betting_info}{timer_msg}
 
 <i>The clash of titans intensifies as choices are made...</i>
         """
     else:
-        # Show timer if set
+        # We've removed the timer functionality
         timer_msg = ""
-        if game.timer_seconds > 0:
-            minutes = game.timer_seconds // 60
-            seconds = game.timer_seconds % 60
-            
-            if minutes > 0:
-                timer_msg = f"\n\n⏱️ <b>BATTLE TIMER:</b> {minutes}m {seconds}s ⏱️"
-            else:
-                timer_msg = f"\n\n⏱️ <b>BATTLE TIMER:</b> {seconds}s ⏱️"
         
         message = f"""
 ⚔️ <b>WARRIORS ASSEMBLING!</b> ⚔️
 
 <b>CURRENT CHALLENGERS:</b>
-{players}{timer_msg}
+{players}{betting_info}{timer_msg}
 
 <i>The creator can start the battle with /start_game
 Others can join with /join</i>
@@ -441,11 +431,12 @@ Others can join with /join</i>
 def multiplayer_result_message(results, game):
     message = f"🏆 <b>BATTLE CONCLUDED!</b> 🏆\n\n"
     
-    # Show all player choices
+    # Show all player choices and bets
     message += "<b>WARRIOR CHOICES:</b>\n"
     for player_id, choice_data in results["choices"].items():
         player_name = choice_data["name"]
         choice = choice_data["choice"]
+        bet_amount = game.players[player_id].get("bet", 0)
         
         if choice == "rock":
             emoji = "🪨"
@@ -453,12 +444,14 @@ def multiplayer_result_message(results, game):
             emoji = "📄"
         else:
             emoji = "✂️"
-            
-        message += f"{player_name}: {choice.upper()} {emoji}\n"
+        
+        # Add bet information if any
+        bet_info = f" [BET: {bet_amount} coins]" if bet_amount > 0 else ""
+        message += f"{player_name}: {choice.upper()} {emoji}{bet_info}\n"
     
     message += "\n"
     
-    # Show winners
+    # Show winners and their winnings
     if results["winners"]:
         winner_names = [game.players[player_id]["name"] for player_id in results["winners"]]
         if len(winner_names) == 1:
@@ -466,6 +459,38 @@ def multiplayer_result_message(results, game):
         else:
             winners_text = ", ".join(winner_names)
             message += f"🌟 <b>VICTORIOUS ALLIANCE:</b> {winners_text} 🌟\n"
+        
+        # Show betting results if there were any bets
+        total_bets = sum(game.players[player_id].get("bet", 0) for player_id in game.players)
+        if total_bets > 0:
+            message += "\n💰 <b>TREASURY RESULTS:</b>\n"
+            
+            # Calculate losers' total bets
+            loser_bet_total = sum(game.players[loser_id].get("bet", 0) 
+                              for loser_id in game.players 
+                              if loser_id not in results["winners"] and loser_id not in results["tied"])
+            
+            # Show each winner and their winnings
+            for winner_id in results["winners"]:
+                winner_name = game.players[winner_id]["name"]
+                winner_bet = game.players[winner_id].get("bet", 0)
+                
+                if winner_bet > 0:
+                    # Calculate their share of the pot based on their bet
+                    winner_bet_total = sum(game.players[w_id].get("bet", 0) for w_id in results["winners"])
+                    winner_share = winner_bet / winner_bet_total if winner_bet_total > 0 else 0
+                    winnings = int(loser_bet_total * winner_share) + 10  # +10 is the base win reward
+                    message += f"{winner_name} gains {winnings} coins (bet: {winner_bet})\n"
+                else:
+                    message += f"{winner_name} gains 5 coins (no bet placed)\n"
+            
+            # Show losers
+            for loser_id in game.players:
+                if loser_id not in results["winners"] and loser_id not in results["tied"]:
+                    loser_name = game.players[loser_id]["name"]
+                    loser_bet = game.players[loser_id].get("bet", 0)
+                    if loser_bet > 0:
+                        message += f"{loser_name} loses {loser_bet} coins\n"
     
     # Show tied players if any
     if results["tied"] and len(results["tied"]) == len(game.players):
@@ -474,16 +499,29 @@ def multiplayer_result_message(results, game):
         tied_names = [game.players[player_id]["name"] for player_id in results["tied"]]
         tied_text = ", ".join(tied_names)
         message += f"\n⚖️ <b>BALANCED FORCES:</b> {tied_text} ⚖️"
+        
+        # Show that tied players keep their bets
+        for tied_id in results["tied"]:
+            tied_bet = game.players[tied_id].get("bet", 0)
+            if tied_bet > 0:
+                tied_name = game.players[tied_id]["name"]
+                message += f"\n{tied_name} keeps their bet of {tied_bet} coins"
     
     message += "\n\n<i>The arena awaits new challengers! Use /multiplayer to create a new battle.</i>"
     
     return message
 
-def player_already_in_game_message(is_group=False):
+def player_already_in_game_message(is_group=False, other_chat_id=None):
     if is_group:
-        return "⚠️ <b>WARRIOR ENGAGED!</b> You're already in a fierce battle in this group! Complete your current duel before seeking new challenges!"
+        base_msg = "⚠️ <b>WARRIOR ENGAGED!</b> You're already in a fierce battle! Complete your current duel before seeking new challenges!"
     else:
-        return "⚠️ <b>WARRIOR OCCUPIED!</b> You're already locked in combat! Finish your current battle before beginning anew!"
+        base_msg = "⚠️ <b>WARRIOR OCCUPIED!</b> You're already locked in combat! Finish your current battle before beginning anew!"
+        
+    # If we know which chat the user is already in, add that information
+    if other_chat_id:
+        base_msg += f"\n\n<i>You are currently in battle in chat ID: {other_chat_id}</i>"
+        
+    return base_msg
 
 def no_game_in_chat_message():
     return "⚠️ <b>EMPTY ARENA!</b> No battle has been arranged here yet! Use /multiplayer to create an epic showdown!"
@@ -529,5 +567,15 @@ def choose_move_message():
         "⚔️ <b>BATTLE PHASE INITIATED!</b> ⚔️ Select your tactical strike!",
         "🌪️ <b>CHOOSE WISELY, WARRIOR!</b> 🌪️ Your fate hangs in the balance!",
         "💫 <b>THE COSMOS WATCHES!</b> 💫 Make your legendary choice!"
+    ]
+    return random.choice(messages)
+
+def betting_message():
+    messages = [
+        "💰 <b>PLACE YOUR WAGER!</b> 💰 How many coins will you risk for glory?",
+        "💎 <b>TREASURY DECISION!</b> 💎 Stake your fortune on this clash!",
+        "🏆 <b>FORTUNE FAVORS THE BOLD!</b> 🏆 What riches will you risk?",
+        "⚖️ <b>WEIGH YOUR WEALTH!</b> ⚖️ How much of your treasure will you gamble?",
+        "🔮 <b>FATE AND FORTUNE!</b> 🔮 The size of your bet determines your reward!"
     ]
     return random.choice(messages)

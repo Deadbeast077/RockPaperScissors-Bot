@@ -10,7 +10,8 @@ from telegram.ext import (
 from game import play_game, get_result_message
 from stats import (
     get_user_stats, update_user_stats, find_user_by_username, 
-    get_all_players, user_stats, get_user_history, get_user_currency
+    get_all_players, user_stats, get_user_history, get_user_currency,
+    update_user_currency
 )
 from game_manager import get_game_manager
 from responses import (
@@ -23,7 +24,8 @@ from responses import (
     game_started_message, not_enough_players_message,
     not_creator_message, successfully_left_message,
     not_in_game_message, game_already_started_message,
-    choose_move_message, player_not_found_message, multiple_matches_message
+    choose_move_message, betting_message, player_not_found_message, 
+    multiple_matches_message
 )
 
 # Get token from environment variable
@@ -77,10 +79,15 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     
-    # Check if the user is already in a multiplayer game in this chat
-    if game_manager.is_user_in_game(user_id, chat_id):
+    # Check if the user is already in ANY game (not just this chat)
+    if game_manager.is_user_in_game(user_id):
+        # Find which game they're already in
+        other_chat_id = game_manager.get_user_current_game(user_id)
         await update.message.reply_text(
-            player_already_in_game_message(is_group=is_group_chat(update)),
+            player_already_in_game_message(
+                is_group=is_group_chat(update), 
+                other_chat_id=other_chat_id
+            ),
             parse_mode="HTML"
         )
         return ConversationHandler.END
@@ -328,10 +335,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel and end the conversation."""
-    await update.message.reply_text("Game cancelled. Type /play to start a new game!")
-    return ConversationHandler.END
+# Cancel command removed as it's not needed - users must play the game if started.
 
 # Multiplayer game commands
 async def multiplayer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -352,6 +356,19 @@ async def multiplayer_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if game_manager.get_game(chat_id):
         await update.message.reply_text(
             game_already_exists_message(),
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
+        
+    # Check if the user is already in ANY game
+    if game_manager.is_user_in_game(user_id):
+        # Find which game they're already in
+        other_chat_id = game_manager.get_user_current_game(user_id)
+        await update.message.reply_text(
+            player_already_in_game_message(
+                is_group=is_group_chat(update),
+                other_chat_id=other_chat_id
+            ),
             parse_mode="HTML"
         )
         return ConversationHandler.END
@@ -415,8 +432,10 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     # If the user is in other games, they'll be automatically removed due to the one-game-per-user rule
     if game_manager.is_user_in_game(user_id):
+        # Find which game they're already in
+        other_chat_id = game_manager.get_user_current_game(user_id)
         await update.message.reply_text(
-            f"⚠️ <b>ATTENTION WARRIOR!</b> You were in another battle, but have been withdrawn from it to join this epic contest!",
+            f"⚠️ <b>ATTENTION WARRIOR!</b> You were in another battle in chat {other_chat_id}, but have been withdrawn from it to join this epic contest!",
             parse_mode="HTML"
         )
     
@@ -448,28 +467,33 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # Send individual messages to each player to make their choices
                 for player_id, player_data in game.players.items():
-                    keyboard = [
+                    # First send a bet selection keyboard
+                    bet_keyboard = [
                         [
-                            InlineKeyboardButton("Rock 🪨", callback_data=f"mp_rock_{chat_id}"),
-                            InlineKeyboardButton("Paper 📄", callback_data=f"mp_paper_{chat_id}"),
-                            InlineKeyboardButton("Scissors ✂️", callback_data=f"mp_scissors_{chat_id}"),
+                            InlineKeyboardButton("10 coins", callback_data=f"bet_10_{chat_id}"),
+                            InlineKeyboardButton("25 coins", callback_data=f"bet_25_{chat_id}"),
+                            InlineKeyboardButton("50 coins", callback_data=f"bet_50_{chat_id}"),
+                        ],
+                        [
+                            InlineKeyboardButton("💰 Skip Betting (0 coins)", callback_data=f"bet_0_{chat_id}"),
                         ]
                     ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    bet_reply_markup = InlineKeyboardMarkup(bet_keyboard)
                     
                     try:
+                        # First ask for a bet
                         await context.bot.send_message(
                             chat_id=player_id,
-                            text=choose_move_message(),
-                            reply_markup=reply_markup,
+                            text="<b>💰 PLACE YOUR BET! 💰</b>\n\nHow many coins do you wish to wager on this epic battle?",
+                            reply_markup=bet_reply_markup,
                             parse_mode="HTML"
                         )
                     except Exception as e:
-                        logger.error(f"Error sending message to player {player_id}: {e}")
+                        logger.error(f"Error sending bet message to player {player_id}: {e}")
                         # Let the group know that a player might not have received their choice buttons
                         await context.bot.send_message(
                             chat_id=chat_id,
-                            text=f"⚠️ <b>WARNING:</b> Could not send choice message to {player_data['name']}. They may need to start the bot in private chat first.",
+                            text=f"⚠️ <b>WARNING:</b> Could not send bet message to {player_data['name']}. They may need to start the bot in private chat first.",
                             parse_mode="HTML"
                         )
                 
@@ -553,30 +577,38 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if game is not None and status_msg is not None:
             game.group_message_id = status_msg.message_id
         
-        # Send individual messages to each player to make their choices
+        # Send individual messages to each player to make their bets first
         for player_id, player_data in game.players.items():
-            keyboard = [
+            # First send a bet selection keyboard
+            bet_keyboard = [
                 [
-                    InlineKeyboardButton("Rock 🪨", callback_data=f"mp_rock_{chat_id}"),
-                    InlineKeyboardButton("Paper 📄", callback_data=f"mp_paper_{chat_id}"),
-                    InlineKeyboardButton("Scissors ✂️", callback_data=f"mp_scissors_{chat_id}"),
+                    InlineKeyboardButton("10 coins", callback_data=f"bet_10_{chat_id}"),
+                    InlineKeyboardButton("25 coins", callback_data=f"bet_25_{chat_id}"),
+                    InlineKeyboardButton("50 coins", callback_data=f"bet_50_{chat_id}"),
+                ],
+                [
+                    InlineKeyboardButton("💰 Skip Betting (0 coins)", callback_data=f"bet_0_{chat_id}"),
                 ]
             ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            bet_reply_markup = InlineKeyboardMarkup(bet_keyboard)
             
             try:
+                # Get the user's current balance
+                balance = get_user_currency(player_id)
+                
+                # First ask for a bet
                 await context.bot.send_message(
                     chat_id=player_id,
-                    text=choose_move_message(),
-                    reply_markup=reply_markup,
+                    text=f"{betting_message()}\n\nYour current balance: <b>{balance} coins</b>\n\nHow many coins do you wish to wager on this epic battle?",
+                    reply_markup=bet_reply_markup,
                     parse_mode="HTML"
                 )
             except Exception as e:
-                logger.error(f"Error sending message to player {player_id}: {e}")
+                logger.error(f"Error sending bet message to player {player_id}: {e}")
                 # Let the group know that a player might not have received their choice buttons
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"⚠️ <b>WARNING:</b> Could not send choice message to {player_data['name']}. They may need to start the bot in private chat first.",
+                    text=f"⚠️ <b>WARNING:</b> Could not send bet message to {player_data['name']}. They may need to start the bot in private chat first.",
                     parse_mode="HTML"
                 )
         
@@ -637,6 +669,112 @@ async def leave_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     
     return ConversationHandler.END
+
+async def betting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle betting for multiplayer games."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Parse the callback data: bet_{amount}_{chat_id}
+    parts = query.data.split('_')
+    if len(parts) != 3:
+        return
+        
+    bet_amount = int(parts[1])
+    chat_id = int(parts[2])
+    user_id = update.effective_user.id
+    
+    # Get user's current currency balance
+    current_balance = get_user_currency(user_id)
+    
+    # Check if the user has enough currency for this bet
+    if bet_amount > current_balance:
+        # Not enough currency, inform the user and offer a lower bet
+        if current_balance > 0:
+            # They have some currency, offer to bet what they have
+            keyboard = [
+                [
+                    InlineKeyboardButton(f"Bet {current_balance} coins", callback_data=f"bet_{current_balance}_{chat_id}"),
+                    InlineKeyboardButton("Skip betting (0 coins)", callback_data=f"bet_0_{chat_id}"),
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                f"⚠️ <b>TREASURY SHORTAGE!</b> ⚠️\n\nYou only have {current_balance} coins in your treasury! Choose a smaller wager.",
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+        else:
+            # They have no currency, skip betting
+            await query.edit_message_text(
+                "⚠️ <b>EMPTY COFFERS!</b> ⚠️\n\nYour treasury is empty! Play more games to earn coins for future bets.",
+                parse_mode="HTML"
+            )
+            
+            # Automatically place a 0 bet
+            game_manager.make_bet(chat_id, user_id, 0)
+            
+            # Show them the RPS choices
+            keyboard = [
+                [
+                    InlineKeyboardButton("Rock 🪨", callback_data=f"mp_rock_{chat_id}"),
+                    InlineKeyboardButton("Paper 📄", callback_data=f"mp_paper_{chat_id}"),
+                    InlineKeyboardButton("Scissors ✂️", callback_data=f"mp_scissors_{chat_id}"),
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Send a new message with the game choices
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=choose_move_message(),
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+        return
+    
+    # User has enough currency, record their bet
+    success, game = game_manager.make_bet(chat_id, user_id, bet_amount)
+    
+    if success:
+        # Confirm the bet
+        if bet_amount > 0:
+            await query.edit_message_text(
+                f"<b>💰 BET PLACED!</b>\n\nYou've wagered {bet_amount} coins on this battle!\n\n<i>Now make your choice...</i>",
+                parse_mode="HTML"
+            )
+        else:
+            await query.edit_message_text(
+                "<b>NO BET PLACED</b>\n\nYou've chosen to skip betting for this battle.\n\n<i>Now make your choice...</i>",
+                parse_mode="HTML"
+            )
+        
+        # Show them the RPS choices
+        keyboard = [
+            [
+                InlineKeyboardButton("Rock 🪨", callback_data=f"mp_rock_{chat_id}"),
+                InlineKeyboardButton("Paper 📄", callback_data=f"mp_paper_{chat_id}"),
+                InlineKeyboardButton("Scissors ✂️", callback_data=f"mp_scissors_{chat_id}"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Send a new message with the game choices
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=choose_move_message(),
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
+    else:
+        # Something went wrong with placing the bet
+        await query.edit_message_text(
+            "⚠️ <b>ERROR!</b> ⚠️\n\nThere was a problem placing your bet. The game may have ended or you're not a participant.",
+            parse_mode="HTML"
+        )
+    
+    return
 
 async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle multiplayer game choices."""
@@ -726,6 +864,45 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
                 opponent_name = ", ".join(opponents)
                 opponent_choice = ", ".join(opponent_choices)
                 
+                # Get the player's bet amount
+                bet_amount = game.players[player_id].get("bet", 0)
+                
+                # Calculate currency changes based on game result
+                currency_change = 0
+                if bet_amount > 0:
+                    if result == "win":
+                        # Winner gets their bet back plus a share of opponents' bets
+                        # Calculate total loser bets to share
+                        loser_bet_total = 0
+                        for loser_id in game.players:
+                            if loser_id not in results["winners"] and loser_id not in results["tied"]:
+                                loser_bet_total += game.players[loser_id].get("bet", 0)
+                        
+                        # Winner share is proportional to their bet compared to total winner bets
+                        winner_bet_total = 0
+                        for winner_id in results["winners"]:
+                            winner_bet_total += game.players[winner_id].get("bet", 0)
+                        
+                        if winner_bet_total > 0:
+                            winner_share = bet_amount / winner_bet_total
+                            currency_change = int(loser_bet_total * winner_share)
+                        
+                        # Add a base win reward
+                        currency_change += 10
+                        
+                    elif result == "lose":
+                        # Loser loses their bet
+                        currency_change = -bet_amount
+                    
+                    # Draw - no change to currency for bets
+                elif result == "win":
+                    # Even with no bet, winners get a small reward
+                    currency_change = 5
+                
+                # Update user's currency balance
+                if currency_change != 0:
+                    update_user_currency(player_id, currency_change)
+                
                 # Update stats with game history and mode
                 update_user_stats(
                     user_id=player_id, 
@@ -734,7 +911,8 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
                     mode='multiplayer',
                     opponent=opponent_name,
                     choice=player_choice,
-                    opponent_choice=opponent_choice
+                    opponent_choice=opponent_choice,
+                    bet=bet_amount
                 )
             
             # End the game
@@ -791,7 +969,7 @@ def create_application():
                 CallbackQueryHandler(show_stats_callback, pattern='^show_stats$'),
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[],  # No fallbacks needed since cancel command was removed
     )
     
     # Add command handlers for core functionality
@@ -808,8 +986,9 @@ def create_application():
     application.add_handler(CommandHandler("start_game", start_game_command))
     application.add_handler(CommandHandler("leave", leave_command))
     
-    # Add multiplayer game callback handler
+    # Add multiplayer game callback handlers
     application.add_handler(CallbackQueryHandler(multiplayer_choice_callback, pattern='^mp_'))
+    application.add_handler(CallbackQueryHandler(betting_callback, pattern='^bet_'))
     
     # Clean up expired games every minute
     # This would be done with job queue in a production bot

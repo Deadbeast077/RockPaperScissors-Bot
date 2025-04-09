@@ -1,7 +1,7 @@
 import logging
 import time
 import random
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set, Union
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG,
@@ -15,12 +15,14 @@ class MultiplayerGame:
         self.chat_id = chat_id
         self.creator_id = creator_id
         self.creator_name = creator_name
-        self.players: Dict[int, Dict] = {}  # user_id -> {name, choice}
+        self.players: Dict[int, Dict] = {}  # user_id -> {name, choice, bet}
         self.started = False
         self.creation_time = time.time()
         self.start_time = None  # When the game was started
         self.message_id = None  # For updating the game message
         self.group_message_id = None  # For updating status in group
+        self.betting_stage = False  # Whether we're currently in the betting stage
+        self.timer_seconds = 0  # Set to 0 since we're not using timers
         
     def add_player(self, user_id: int, username: str) -> bool:
         """Add a player to the game. Returns True if player was added."""
@@ -39,7 +41,8 @@ class MultiplayerGame:
         if user_id not in self.players:
             self.players[user_id] = {
                 "name": username,
-                "choice": None
+                "choice": None,
+                "bet": 0
             }
             return True
         # Player already exists but we'll count it as success
@@ -64,6 +67,14 @@ class MultiplayerGame:
         """Check if the game timer has expired - always returns False since we removed timers"""
         return False
             
+    def make_bet(self, user_id: int, bet_amount: int) -> bool:
+        """Record a player's bet. Returns True if successful."""
+        if not self.started or user_id not in self.players:
+            return False
+            
+        self.players[user_id]["bet"] = bet_amount
+        return True
+    
     def make_choice(self, user_id: int, choice: str) -> bool:
         """Record a player's choice. Returns True if all players have made choices."""
         if not self.started or user_id not in self.players:
@@ -131,7 +142,10 @@ class MultiplayerGame:
         player_list = []
         for user_id, player_data in self.players.items():
             status = "✓" if self.started and player_data["choice"] else "⏳"
-            player_list.append(f"{status} {player_data['name']}")
+            bet_amount = player_data.get("bet", 0)
+            bet_info = f" [💰 {bet_amount} coins]" if bet_amount > 0 else ""
+            
+            player_list.append(f"{status} {player_data['name']}{bet_info}")
             
         return "\n".join(player_list)
 
@@ -233,6 +247,21 @@ class GameManager:
         success = game.start_game()
         return success, game
         
+    def make_bet(self, chat_id: int, user_id: int, bet_amount: int) -> Tuple[bool, Optional[MultiplayerGame]]:
+        """
+        Record a player's bet.
+        Returns (success, game)
+        """
+        if chat_id not in self.games:
+            return False, None
+            
+        game = self.games[chat_id]
+        if user_id not in game.players:
+            return False, game
+            
+        success = game.make_bet(user_id, bet_amount)
+        return success, game
+        
     def make_choice(self, chat_id: int, user_id: int, choice: str) -> Tuple[bool, Optional[MultiplayerGame], bool]:
         """
         Record a player's choice. 
@@ -277,12 +306,24 @@ class GameManager:
         If chat_id is provided, checks if user is in that specific game.
         """
         if chat_id is None:
+            # Check if user is in any game
             return user_id in self.user_games and bool(self.user_games[user_id])
-        
-        return (user_id in self.user_games and 
-                chat_id in self.user_games[user_id] and
-                chat_id in self.games and 
-                user_id in self.games[chat_id].players)
+        else:
+            # Check if user is in a specific game
+            return (user_id in self.user_games and 
+                    chat_id in self.user_games[user_id] and
+                    chat_id in self.games and 
+                    user_id in self.games[chat_id].players)
+            
+    def get_user_current_game(self, user_id: int) -> Optional[int]:
+        """
+        Returns the chat_id of a game the user is currently in, or None if they're not in any game.
+        """
+        if user_id in self.user_games and bool(self.user_games[user_id]):
+            # Return the first chat_id in the user's games
+            for chat_id in self.user_games[user_id]:
+                return chat_id
+        return None
                 
     def clean_up_expired_games(self, max_age_seconds: int = 300) -> int:
         """Remove expired games. Returns the number of games removed."""
