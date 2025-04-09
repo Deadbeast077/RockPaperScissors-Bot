@@ -45,9 +45,8 @@ HELP_MESSAGE = """
 
 <b>🔥 MULTIPLAYER WARFARE:</b>
 /multiplayer - Create an epic battle arena
-/join - Enter an existing multiplayer battle
-/start_game - Begin the multiplayer showdown (creator only)
-/leave - Withdraw from a multiplayer battle
+/join - Enter an existing multiplayer battle (starts automatically with 2+ players)
+/leave - Withdraw from a multiplayer battle (before it starts)
 
 <b>📊 BATTLE STATISTICS:</b>
 /stats - View your own battle record
@@ -420,8 +419,8 @@ def multiplayer_game_status(game):
 <b>CURRENT CHALLENGERS:</b>
 {players}{betting_info}{timer_msg}
 
-<i>The creator can start the battle with /start_game
-Others can join with /join</i>
+<i>The battle begins automatically when another player joins!
+Use /join to enter the arena!</i>
         """
     
     return message

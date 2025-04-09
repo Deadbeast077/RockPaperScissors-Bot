@@ -983,7 +983,6 @@ def create_application():
     # Add multiplayer game command handlers
     application.add_handler(CommandHandler("multiplayer", multiplayer_command))
     application.add_handler(CommandHandler("join", join_command))
-    application.add_handler(CommandHandler("start_game", start_game_command))
     application.add_handler(CommandHandler("leave", leave_command))
     
     # Add multiplayer game callback handlers
