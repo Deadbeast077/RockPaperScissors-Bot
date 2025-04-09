@@ -8,11 +8,14 @@ from telegram.ext import (
 )
 
 from game import play_game, get_result_message
-from stats import get_user_stats, update_user_stats, find_user_by_username, get_all_players, user_stats
+from stats import (
+    get_user_stats, update_user_stats, find_user_by_username, 
+    get_all_players, user_stats, get_user_history, get_user_currency
+)
 from game_manager import get_game_manager
 from responses import (
     START_MESSAGE, HELP_MESSAGE, 
-    play_message, stats_message,
+    play_message, stats_message, format_game_history, currency_message,
     get_win_message, get_lose_message, get_draw_message,
     create_multiplayer_game_message, multiplayer_game_status, 
     multiplayer_result_message, player_already_in_game_message,
@@ -62,12 +65,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
         START_MESSAGE.format(user.first_name),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
-    await update.message.reply_text(HELP_MESSAGE, parse_mode="Markdown")
+    await update.message.reply_text(HELP_MESSAGE, parse_mode="HTML")
 
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start a solo game when the command /play is issued."""
@@ -106,8 +109,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Play the game and get result
     result, bot_choice = play_game(user_choice)
     
-    # Update user stats
-    update_user_stats(user_id, username, result)
+    # Update user stats with game history
+    update_user_stats(
+        user_id=user_id, 
+        username=username, 
+        result=result, 
+        mode='solo',
+        opponent="Bot",
+        choice=user_choice,
+        opponent_choice=bot_choice
+    )
     
     # Generate appropriate response based on result
     if result == "win":
@@ -186,6 +197,51 @@ async def show_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=reply_markup
     )
     return PLAYING
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show a user's game history when the command /history is issued."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    limit = 10  # Show more history entries with the dedicated command
+    
+    # Get the user's game history
+    history_items = get_user_history(user_id, limit=limit)
+    
+    # Format the history into a readable message
+    history_text = format_game_history(history_items)
+    
+    # Create the message
+    message = f"<b>📜 BATTLE CHRONICLES OF {username.upper()} 📜</b>\n\n"
+    message += history_text
+    
+    # Send the message
+    await update.message.reply_text(
+        message,
+        parse_mode="HTML"
+    )
+    return
+
+async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show a user's virtual currency balance when the command /wallet is issued."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
+    
+    # Get the user's currency balance
+    balance = get_user_currency(user_id)
+    
+    # Format the currency message
+    currency_text = currency_message(balance)
+    
+    # Create the message
+    message = f"<b>💰 TREASURY OF {username.upper()} 💰</b>\n\n"
+    message += currency_text
+    
+    # Send the message
+    await update.message.reply_text(
+        message,
+        parse_mode="HTML"
+    )
+    return
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user stats when the command /stats is issued."""
@@ -654,7 +710,32 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
                 result = "win" if player_id in results["winners"] else "lose"
                 if player_id in results["tied"]:
                     result = "draw"
-                update_user_stats(player_id, username, result)
+                
+                # Get this player's choice and the choices of their opponents
+                player_choice = results["choices"][player_id]["choice"] if player_id in results["choices"] else None
+                
+                # Get opponent names and choices
+                opponents = []
+                opponent_choices = []
+                for opponent_id, choice_data in results["choices"].items():
+                    if opponent_id != player_id:
+                        opponents.append(choice_data["name"])
+                        opponent_choices.append(choice_data["choice"])
+                
+                # Format opponent info
+                opponent_name = ", ".join(opponents)
+                opponent_choice = ", ".join(opponent_choices)
+                
+                # Update stats with game history and mode
+                update_user_stats(
+                    user_id=player_id, 
+                    username=username, 
+                    result=result, 
+                    mode='multiplayer',
+                    opponent=opponent_name,
+                    choice=player_choice,
+                    opponent_choice=opponent_choice
+                )
             
             # End the game
             game_manager.end_game(chat_id)
@@ -717,6 +798,8 @@ def create_application():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("history", history_command))
+    application.add_handler(CommandHandler("wallet", wallet_command))
     application.add_handler(solo_game_handler)
     
     # Add multiplayer game command handlers

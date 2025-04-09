@@ -3,65 +3,75 @@ import time
 
 # Welcome and help messages with supercool captions
 START_MESSAGE = """
-*🎲 WELCOME TO THE ARENA! 🎲*
+<b>🎲 WELCOME TO THE ARENA! 🎲</b>
 
 Hey, {}! 👋 Prepare for the ultimate battle of wits and strategy! 💥
 
-🔥 *RockPaperScissors Bot* (@RPLSLBot) 🔥
+🔥 <b>RockPaperScissors Bot</b> (@RPLSLBot) 🔥
 The legendary battleground where legends are forged!
 
-🎮 *PLAY MODES:*
+🎮 <b>PLAY MODES:</b>
 • Solo - Test your skills against the bot!
 • Multiplayer - Challenge your friends in epic group battles!
 
-🛡️ *COMMAND YOUR DESTINY:*
+🛡️ <b>COMMAND YOUR DESTINY:</b>
 /play - Enter solo combat against the bot
 /multiplayer - Summon friends for an epic group battle
 /join - Enter a multiplayer arena in your group
 /stats - Reveal your legendary battle record
-/stats [username] - View another warrior's legend
-Reply with /stats - View stats of a replied-to warrior
+/wallet - View your coin treasury for betting
+/history - Browse your recent battle chronicles
 /help - Discover the ancient rules of combat
 /cancel - Retreat from battle (but heroes never quit!)
 
-*ARE YOU READY TO CLAIM VICTORY?* ⚔️
+💰 <b>RICHES AND GLORY:</b>
+• Earn coins with each victory
+• Bet on multiplayer matches
+• Track your epic combat history
+
+<b>ARE YOU READY TO CLAIM VICTORY?</b> ⚔️
 """
 
 HELP_MESSAGE = """
-*🌟 ULTIMATE ROCK PAPER SCISSORS GUIDE 🌟*
+<b>🌟 ULTIMATE ROCK PAPER SCISSORS GUIDE 🌟</b>
 (@RPLSLBot)
 
-*⚔️ RULES OF ENGAGEMENT:*
-🪨 *ROCK* - Crushes scissors with devastating force!
-📄 *PAPER* - Envelops rock in a strategic embrace!
-✂️ *SCISSORS* - Slice through paper with precision!
+<b>⚔️ RULES OF ENGAGEMENT:</b>
+🪨 <b>ROCK</b> - Crushes scissors with devastating force!
+📄 <b>PAPER</b> - Envelops rock in a strategic embrace!
+✂️ <b>SCISSORS</b> - Slice through paper with precision!
 
-*👑 SOLO COMBAT:*
+<b>👑 SOLO COMBAT:</b>
 /play - Face the bot in one-on-one combat
 
-*🔥 MULTIPLAYER WARFARE:*
+<b>🔥 MULTIPLAYER WARFARE:</b>
 /multiplayer - Create an epic battle arena
 /join - Enter an existing multiplayer battle
 /start_game - Begin the multiplayer showdown (creator only)
 /leave - Withdraw from a multiplayer battle
 
-*📊 BATTLE STATISTICS:*
+<b>📊 BATTLE STATISTICS:</b>
 /stats - View your own battle record
 /stats [username] - View another warrior's battle record
 /stats [username] solo - View solo stats only
 /stats [username] multiplayer - View multiplayer stats only
 • Reply to a player's message with /stats to see their legend
 
-*🛡️ SPECIAL FEATURES:*
+<b>💰 TREASURY AND HISTORY:</b>
+/wallet - Check your coin balance for betting
+/history - View your recent battle chronicles 
+
+<b>🛡️ SPECIAL FEATURES:</b>
 • One-game restriction: Warriors can only battle in one arena at a time
 • Quick-join: Players can make choices even without private messaging the bot first
+• Virtual currency: Earn coins in battles to place multiplayer bets
+• Game history: Track your last 10 epic encounters
 
-*🛡️ GENERAL COMMANDS:*
-/stats - View your legendary battle record
+<b>🛡️ GENERAL COMMANDS:</b>
 /help - Display this sacred scroll of knowledge
 /cancel - Retreat from the current battle
 
-*MAY FORTUNE FAVOR THE BOLD!* 🎭
+<b>MAY FORTUNE FAVOR THE BOLD!</b> 🎭
 """
 
 # Play messages - Supercool edition
@@ -127,6 +137,85 @@ def get_draw_message():
     return random.choice(messages)
 
 # Stats message with epic styling
+def format_game_history(history_items):
+    """
+    Format a player's game history into a readable message
+    
+    Args:
+        history_items (list): List of game history records
+        
+    Returns:
+        str: Formatted history message
+    """
+    if not history_items:
+        return "<i>No battles recorded in the scrolls of history!</i>"
+    
+    message = ""
+    
+    for i, game in enumerate(history_items):
+        # Convert timestamp to readable format
+        timestamp = time.strftime("%d/%m/%Y %H:%M", time.localtime(game.get('timestamp', 0)))
+        
+        # Get basic game info
+        result = game.get('result', '?').upper()
+        mode = game.get('mode', 'solo')
+        choice = game.get('choice', '?')
+        opponent_choice = game.get('opponent_choice', '?')
+        opponent = game.get('opponent', 'Bot')
+        
+        # Determine result emoji
+        if result == 'WIN':
+            result_emoji = '🌟'
+        elif result == 'LOSE':
+            result_emoji = '💔'
+        else:  # draw
+            result_emoji = '⚖️'
+        
+        # Format entry
+        message += f"{i+1}. {timestamp} - {result_emoji} <b>{result}</b> vs {opponent}\n"
+        message += f"   Mode: {mode.title()}, Your choice: {choice.title()}, Opponent: {opponent_choice.title()}\n"
+        
+        # Add betting info if present
+        if 'bet' in game:
+            bet = game.get('bet', 0)
+            currency_change = game.get('currency_change', 0)
+            if currency_change > 0:
+                message += f"   💰 Bet: {bet} coins, Won: +{currency_change} coins\n"
+            elif currency_change < 0:
+                message += f"   💰 Bet: {bet} coins, Lost: {currency_change} coins\n"
+            else:
+                message += f"   💰 Bet: {bet} coins, Result: Draw (no change)\n"
+        
+        # Add separator except for last item
+        if i < len(history_items) - 1:
+            message += "   ──────────────\n"
+    
+    return message
+
+def currency_message(currency):
+    """
+    Generate a formatted message about the user's virtual currency
+    
+    Args:
+        currency (int): The user's currency balance
+        
+    Returns:
+        str: Formatted currency message
+    """
+    message = "<b>💰 TREASURE VAULT 💰</b>\n"
+    message += f"<b>Current Balance:</b> {currency} coins\n\n"
+    
+    if currency <= 0:
+        message += "<i>Your coffers are empty, brave warrior! Keep playing to earn more coins!</i>\n"
+    elif currency < 50:
+        message += "<i>A modest sum for a budding champion. Victory awaits to fill your coffers!</i>\n"
+    elif currency < 200:
+        message += "<i>A respectable treasure! Ready for high-stakes battles?</i>\n"
+    else:
+        message += "<i>A fortune fit for royalty! Your wealth is legendary!</i>\n"
+    
+    return message
+
 def stats_message(stats, mode=None):
     """
     Generate a formatted message with the user's statistics
@@ -261,6 +350,26 @@ def stats_message(stats, mode=None):
         message += "⚔️ <b>BATTLE-HARDENED WARRIOR!</b> Experience is forging your legend! ⚔️"
     else:
         message += "🌟 <b>DESTINY AWAITS!</b> Every legend begins with perseverance! 🌟"
+    
+    # Import the needed functions if this is not the stats for a queried user
+    from stats import get_user_currency, get_user_history
+    
+    # If there's a user_id in the stats, this is the user's own stats
+    if 'user_id' in stats:
+        user_id = stats['user_id']
+        
+        # Add currency information
+        message += f"\n\n<b>━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        message += currency_message(get_user_currency(user_id))
+        
+        # Add game history section
+        message += f"\n<b>━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
+        message += f"<b>🏹 RECENT BATTLE CHRONICLES 🏹</b>\n\n"
+        
+        # Get history items limited to 5
+        history_items = get_user_history(user_id, limit=5)
+        history_text = format_game_history(history_items)
+        message += history_text
         
     return message
 

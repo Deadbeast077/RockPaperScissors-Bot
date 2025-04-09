@@ -1,6 +1,10 @@
-# In-memory storage for user statistics and username mapping
+import time
+
+# In-memory storage for user statistics, username mapping, game history, and virtual currency
 user_stats = {}
 username_to_id = {}  # Map usernames to user IDs for lookup
+game_history = {}  # Store game history per user {user_id: [list of game records]}
+user_currency = {}  # Store virtual currency balance per user {user_id: balance}
 
 def get_user_stats(user_id, mode=None):
     """
@@ -101,7 +105,77 @@ def get_all_players():
     """
     return [(user_id, stats['username']) for user_id, stats in user_stats.items()]
 
-def update_user_stats(user_id, username, result, mode='solo'):
+def add_game_to_history(user_id, game_data):
+    """
+    Add a game record to the user's game history
+    
+    Args:
+        user_id (int): The user's Telegram ID
+        game_data (dict): Data about the game to be recorded
+    """
+    # Initialize history for new users
+    if user_id not in game_history:
+        game_history[user_id] = []
+    
+    # Add the new game record, with timestamp
+    game_data['timestamp'] = time.time()
+    
+    # Add to the beginning of the list (newest first)
+    game_history[user_id].insert(0, game_data)
+    
+    # Limit history to most recent 10 games
+    if len(game_history[user_id]) > 10:
+        game_history[user_id] = game_history[user_id][:10]
+
+def get_user_history(user_id, limit=5):
+    """
+    Get the game history for a user
+    
+    Args:
+        user_id (int): The user's Telegram ID
+        limit (int): Maximum number of history items to return
+        
+    Returns:
+        list: The user's most recent games (up to limit)
+    """
+    if user_id not in game_history:
+        return []
+    
+    return game_history[user_id][:limit]
+
+def get_user_currency(user_id):
+    """
+    Get the user's virtual currency balance
+    
+    Args:
+        user_id (int): The user's Telegram ID
+        
+    Returns:
+        int: The user's currency balance
+    """
+    # Initialize balance for new users (start with 100 coins)
+    if user_id not in user_currency:
+        user_currency[user_id] = 100
+    
+    return user_currency[user_id]
+
+def update_user_currency(user_id, amount):
+    """
+    Update the user's virtual currency balance
+    
+    Args:
+        user_id (int): The user's Telegram ID
+        amount (int): Amount to add (positive) or subtract (negative)
+        
+    Returns:
+        int: The user's new balance
+    """
+    current_balance = get_user_currency(user_id)
+    new_balance = max(0, current_balance + amount)  # Ensure balance doesn't go below 0
+    user_currency[user_id] = new_balance
+    return new_balance
+
+def update_user_stats(user_id, username, result, mode='solo', opponent=None, choice=None, opponent_choice=None, bet=0):
     """
     Update the statistics for a user after a game
     
@@ -110,6 +184,10 @@ def update_user_stats(user_id, username, result, mode='solo'):
         username (str): The user's username or first name
         result (str): The result of the game ('win', 'lose', or 'draw')
         mode (str): The game mode ('solo' or 'multiplayer')
+        opponent (str, optional): The opponent's name
+        choice (str, optional): The user's choice (rock, paper, scissors)
+        opponent_choice (str, optional): The opponent's choice
+        bet (int, optional): The amount bet on this game
     """
     # Make sure the mode is valid
     if mode not in ['solo', 'multiplayer']:
@@ -192,3 +270,31 @@ def update_user_stats(user_id, username, result, mode='solo'):
         
     # Update the user stats dictionary
     user_stats[user_id] = stats
+    
+    # Record game in history
+    game_record = {
+        'timestamp': time.time(),
+        'mode': mode,
+        'result': result,
+        'choice': choice,
+        'opponent_choice': opponent_choice,
+        'opponent': opponent
+    }
+    
+    # Add betting information if applicable
+    if bet > 0:
+        game_record['bet'] = bet
+        
+        # Update currency based on result
+        if result == 'win':
+            winnings = bet  # Win the bet amount
+            update_user_currency(user_id, winnings)
+            game_record['currency_change'] = winnings
+        elif result == 'lose':
+            loss = -bet  # Lose the bet amount
+            update_user_currency(user_id, loss)
+            game_record['currency_change'] = loss
+        # No currency change on draw
+    
+    # Add to history
+    add_game_to_history(user_id, game_record)
