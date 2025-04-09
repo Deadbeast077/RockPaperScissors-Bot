@@ -22,7 +22,6 @@ The legendary battleground where legends are forged!
 /wallet - View your coin treasury for betting
 /history - Browse your recent battle chronicles
 /help - Discover the ancient rules of combat
-/cancel - Retreat from battle (but heroes never quit!)
 
 💰 <b>RICHES AND GLORY:</b>
 • Earn coins with each victory
@@ -70,7 +69,6 @@ HELP_MESSAGE = """
 
 <b>🛡️ GENERAL COMMANDS:</b>
 /help - Display this sacred scroll of knowledge
-/cancel - Retreat from the current battle
 
 <b>MAY FORTUNE FAVOR THE BOLD!</b> 🎭
 """
