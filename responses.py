@@ -397,10 +397,23 @@ def multiplayer_game_status(game):
     total_bets = sum(player_data.get("bet", 0) for player_id, player_data in game.players.items())
     betting_info = f"\n\n💰 <b>TREASURY POOL:</b> {total_bets} coins" if total_bets > 0 else ""
     
-    if game.started:
-        # We've removed the timer functionality
-        timer_msg = ""
+    # Calculate timer information for games that aren't started yet
+    if not game.started and hasattr(game, 'last_player_join_time') and hasattr(game, 'timer_seconds'):
+        import time
+        current_time = time.time()
+        elapsed_time = current_time - game.last_player_join_time
+        remaining_time = max(0, game.timer_seconds - elapsed_time)
         
+        # Format the time remaining nicely
+        minutes = int(remaining_time // 60)
+        seconds = int(remaining_time % 60)
+        
+        # Add the timer message
+        timer_msg = f"\n\n⏱️ <b>ARENA CLOSES IN:</b> {minutes}m {seconds}s if no one joins!"
+    else:
+        timer_msg = ""
+    
+    if game.started:
         message = f"""
 🏟️ <b>BATTLE IN PROGRESS!</b> 🏟️
 
@@ -410,9 +423,6 @@ def multiplayer_game_status(game):
 <i>The clash of titans intensifies as choices are made...</i>
         """
     else:
-        # We've removed the timer functionality
-        timer_msg = ""
-        
         message = f"""
 ⚔️ <b>WARRIORS ASSEMBLING!</b> ⚔️
 
