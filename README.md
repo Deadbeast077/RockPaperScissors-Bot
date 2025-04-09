@@ -6,8 +6,10 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
 
 - 🎮 **Solo Combat**: Challenge the bot to test your skills in one-on-one battles!
 - 🔥 **Multiplayer Arena**: Create epic group battles and challenge your friends!
+- 💰 **Virtual Currency**: Place bets on multiplayer matches to earn more coins!
 - 📊 **Battle Statistics**: Track your victories, defeats, and legendary win streaks!
 - 🌟 **Epic Messages**: Enjoy dramatic, supercool messages that make every battle feel legendary!
+- ⏱️ **Auto-Timeout**: Games automatically end after 3 minutes if no one joins
 - 🏆 **Fair Competition**: Everyone gets one game at a time to ensure balanced gameplay
 - 🚀 **Group Integration**: Works perfectly in both private chats and group conversations
 
@@ -17,14 +19,14 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
 - `/start` - Begin your journey and see the welcome message
 - `/help` - Discover the sacred rules and commands
 - `/play` - Enter solo combat against the bot
-- `/stats` - View your legendary battle record
-- `/cancel` - Retreat from current battle
+- `/stats` - View your legendary battle record (can be used with [username] and [mode])
+- `/history` - View your recent battle history
+- `/wallet` - Check your virtual currency balance
 
 ### Multiplayer Commands
 - `/multiplayer` - Create an epic battle arena in your group
-- `/join` - Enter an existing multiplayer battle
-- `/start_game` - Begin the multiplayer showdown (creator only)
-- `/leave` - Withdraw from a multiplayer battle
+- `/join` - Enter an existing multiplayer battle (games auto-start when a second player joins)
+- `/leave` - Withdraw from a multiplayer battle (only before the game starts)
 
 ## 🛡️ Setup Instructions
 
@@ -32,18 +34,34 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
    - Start a chat with [@BotFather](https://t.me/BotFather) on Telegram
    - Send `/newbot` command
    - Set the name to "RockPaperScissors Bot"
-   - Set the username to "@RPLSLBot" (or another available username)
+   - Set the username to a unique username of your choice
    - Copy the API token provided by BotFather
 
-2. **Set up Environment Variable**:
-   - Set the `TELEGRAM_TOKEN` environment variable to your bot token:
-     ```
-     export TELEGRAM_TOKEN="your_bot_token_here"
+2. **Install Dependencies**:
+   - See the [dependencies.md](dependencies.md) file for required packages
+   - Install them using pip:
+     ```bash
+     pip install "python-telegram-bot[job-queue]>=20.7" apscheduler>=3.10.4
      ```
 
-3. **Run the Bot**:
+3. **Set up Environment Variable**:
+   - Set the `TELEGRAM_TOKEN` environment variable to your bot token:
+     ```bash
+     # For Linux/macOS
+     export TELEGRAM_TOKEN="your_bot_token_here"
+     
+     # For Windows Command Prompt
+     set TELEGRAM_TOKEN=your_bot_token_here
+     
+     # For Windows PowerShell
+     $env:TELEGRAM_TOKEN="your_bot_token_here"
+     ```
+   - For deployment on hosting platforms, set this as a secret environment variable
+
+4. **Run the Bot**:
    - Execute `python main.py` to start the bot
    - The bot will run and connect to the Telegram API
+   - You should see logs indicating successful connection
 
 ## 📁 Project Structure
 
@@ -71,11 +89,11 @@ An epic Telegram bot that lets users engage in legendary Rock Paper Scissors bat
 ### Multiplayer Warfare
 1. Add the bot to a Telegram group with your friends
 2. Create a new game with `/multiplayer`
-3. Have your friends join with `/join`
-4. When everyone is ready, start the battle with `/start_game` (creator only)
-5. Each player will receive a private message to make their choice
-6. Results will be announced in the group chat with epic details!
-7. Check your updated stats with `/stats`
+3. Have your friends join with `/join` (game starts automatically when a second player joins)
+4. Each player will receive a private message to place bets and make their choices
+5. Results will be announced in the group chat with epic details and prize distributions!
+6. Check your updated stats and wallet with `/stats` and `/wallet`
+7. Games automatically time out after 3 minutes if no one joins
 
 ## 🧙‍♂️ Customize Your Legend
 
