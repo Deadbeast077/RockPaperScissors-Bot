@@ -1,4 +1,5 @@
 import random
+import time
 
 # Welcome and help messages with supercool captions
 START_MESSAGE = """
@@ -18,6 +19,7 @@ The legendary battleground where legends are forged!
 /multiplayer - Summon friends for an epic group battle
 /join - Enter a multiplayer arena in your group
 /stats - Reveal your legendary battle record
+/stats [username] - View another warrior's legend
 /help - Discover the ancient rules of combat
 /cancel - Retreat from battle (but heroes never quit!)
 
@@ -37,10 +39,20 @@ HELP_MESSAGE = """
 /play - Face the bot in one-on-one combat
 
 *🔥 MULTIPLAYER WARFARE:*
-/multiplayer - Create an epic battle arena in your group
+/multiplayer - Create an epic battle arena
 /join - Enter an existing multiplayer battle
 /start_game - Begin the multiplayer showdown (creator only)
 /leave - Withdraw from a multiplayer battle
+
+*📊 BATTLE STATISTICS:*
+/stats - View your own battle record
+/stats [username] - View another warrior's battle record
+/stats [username] solo - View solo stats only
+/stats [username] multiplayer - View multiplayer stats only
+
+*🛡️ SPECIAL FEATURES:*
+• One-game restriction: Warriors can only battle in one arena at a time
+• Quick-join: Players can make choices even without private messaging the bot first
 
 *🛡️ GENERAL COMMANDS:*
 /stats - View your legendary battle record
@@ -113,26 +125,49 @@ def get_draw_message():
     return random.choice(messages)
 
 # Stats message with epic styling
-def stats_message(stats):
+def stats_message(stats, mode=None):
     """
     Generate a formatted message with the user's statistics
     
     Args:
         stats (dict): The user's statistics
+        mode (str, optional): Game mode to display specific stats ('solo', 'multiplayer', or None for all)
         
     Returns:
         str: A formatted message with the statistics
     """
     username = stats.get('username', 'Warrior')
-    wins = stats.get('wins', 0)
-    losses = stats.get('losses', 0)
-    draws = stats.get('draws', 0)
-    total_games = stats.get('total_games', 0)
-    win_percentage = stats.get('win_percentage', 0.0)
-    current_streak = stats.get('current_streak', 0)
-    best_streak = stats.get('best_streak', 0)
     
+    # Main header
     message = f"<b>🏆 LEGEND OF {username.upper()} 🏆</b>\n\n"
+    
+    # Check if we're showing a specific mode or all stats
+    if mode and mode in ['solo', 'multiplayer']:
+        # Show mode-specific stats
+        mode_stats = stats.get(mode, {})
+        wins = mode_stats.get('wins', 0)
+        losses = mode_stats.get('losses', 0)
+        draws = mode_stats.get('draws', 0)
+        total_games = mode_stats.get('total_games', 0)
+        win_percentage = mode_stats.get('win_percentage', 0.0)
+        current_streak = mode_stats.get('current_streak', 0)
+        best_streak = mode_stats.get('best_streak', 0)
+        
+        mode_title = "🎮 SOLO BATTLES" if mode == 'solo' else "🔥 MULTIPLAYER BATTLES"
+        message += f"<b>{mode_title}</b>\n"
+    else:
+        # Show combined stats
+        wins = stats.get('wins', 0)
+        losses = stats.get('losses', 0)
+        draws = stats.get('draws', 0)
+        total_games = stats.get('total_games', 0)
+        win_percentage = stats.get('win_percentage', 0.0)
+        current_streak = stats.get('current_streak', 0)
+        best_streak = stats.get('best_streak', 0)
+        
+        message += f"<b>⚡ COMBINED BATTLE RECORD</b>\n"
+    
+    # Common stats section
     message += f"<b>⚔️ BATTLES FOUGHT:</b> {total_games}\n"
     message += f"<b>🌟 VICTORIES:</b> {wins}\n"
     message += f"<b>💔 DEFEATS:</b> {losses}\n"
@@ -145,6 +180,21 @@ def stats_message(stats):
     
     if best_streak > 0:
         message += f"<b>👑 LEGENDARY STREAK:</b> {best_streak}\n"
+    
+    # If we're showing all stats, also include the breakdowns
+    if not mode:
+        solo_stats = stats.get('solo', {})
+        multi_stats = stats.get('multiplayer', {})
+        
+        # Add solo stats summary if played any solo games
+        if solo_stats.get('total_games', 0) > 0:
+            message += f"\n<b>🎮 SOLO STATS:</b> {solo_stats.get('wins', 0)}W - {solo_stats.get('losses', 0)}L - {solo_stats.get('draws', 0)}D "
+            message += f"({solo_stats.get('win_percentage', 0.0)}%)\n"
+            
+        # Add multiplayer stats summary if played any multiplayer games
+        if multi_stats.get('total_games', 0) > 0:
+            message += f"<b>👥 MULTIPLAYER STATS:</b> {multi_stats.get('wins', 0)}W - {multi_stats.get('losses', 0)}L - {multi_stats.get('draws', 0)}D "
+            message += f"({multi_stats.get('win_percentage', 0.0)}%)\n"
     
     message += "\n"
     
@@ -182,20 +232,48 @@ def multiplayer_game_status(game):
     players = game.get_players_string()
     
     if game.started:
+        # Calculate remaining time if timer is active
+        timer_msg = ""
+        if game.timer_seconds > 0 and game.start_time:
+            elapsed = time.time() - game.start_time
+            remaining = max(0, game.timer_seconds - elapsed)
+            
+            if remaining > 0:
+                minutes = int(remaining) // 60
+                seconds = int(remaining) % 60
+                
+                if minutes > 0:
+                    timer_msg = f"\n\n⏱️ <b>TIME REMAINING:</b> {minutes}m {seconds}s ⏱️"
+                else:
+                    timer_msg = f"\n\n⏱️ <b>TIME REMAINING:</b> {seconds}s ⏱️"
+            else:
+                timer_msg = "\n\n⏱️ <b>TIME'S ALMOST UP!</b> ⏱️"
+        
         message = f"""
 🏟️ <b>BATTLE IN PROGRESS!</b> 🏟️
 
 <b>WARRIORS IN THE ARENA:</b>
-{players}
+{players}{timer_msg}
 
 <i>The clash of titans intensifies as choices are made...</i>
         """
     else:
+        # Show timer if set
+        timer_msg = ""
+        if game.timer_seconds > 0:
+            minutes = game.timer_seconds // 60
+            seconds = game.timer_seconds % 60
+            
+            if minutes > 0:
+                timer_msg = f"\n\n⏱️ <b>BATTLE TIMER:</b> {minutes}m {seconds}s ⏱️"
+            else:
+                timer_msg = f"\n\n⏱️ <b>BATTLE TIMER:</b> {seconds}s ⏱️"
+        
         message = f"""
 ⚔️ <b>WARRIORS ASSEMBLING!</b> ⚔️
 
 <b>CURRENT CHALLENGERS:</b>
-{players}
+{players}{timer_msg}
 
 <i>The creator can start the battle with /start_game
 Others can join with /join</i>
@@ -252,6 +330,19 @@ def player_already_in_game_message(is_group=False):
 
 def no_game_in_chat_message():
     return "⚠️ <b>EMPTY ARENA!</b> No battle has been arranged here yet! Use /multiplayer to create an epic showdown!"
+    
+def player_not_found_message(username=None):
+    if username:
+        return f"⚠️ <b>WARRIOR UNKNOWN!</b> The legend of {username} has not yet been written in our scrolls. They must battle to create their tale!"
+    else:
+        return "⚠️ <b>WARRIOR UNKNOWN!</b> No such warrior found in the chronicles of battle!"
+
+def multiple_matches_message(matches):
+    message = "⚠️ <b>MULTIPLE HEROES FOUND!</b> The name echoes across many warriors:\n\n"
+    for user_id, username in matches:
+        message += f"• {username}\n"
+    message += "\nPlease specify a more unique name to view their legend!"
+    return message
 
 def game_already_exists_message():
     return "⚠️ <b>ARENA OCCUPIED!</b> A battle is already underway! Join with /join or wait for it to conclude!"

@@ -18,20 +18,32 @@ class MultiplayerGame:
         self.players: Dict[int, Dict] = {}  # user_id -> {name, choice}
         self.started = False
         self.creation_time = time.time()
+        self.start_time = None  # When the game was started
         self.message_id = None  # For updating the game message
+        self.group_message_id = None  # For updating status in group
         
     def add_player(self, user_id: int, username: str) -> bool:
         """Add a player to the game. Returns True if player was added."""
+        # If game already started, only allow adding players in very specific cases
         if self.started:
+            # If player is already in the game but needs to be updated (e.g., they didn't have a username before)
+            if user_id in self.players:
+                # Update username if provided and different
+                if username and self.players[user_id]["name"] != username:
+                    self.players[user_id]["name"] = username
+                return True
+            # We don't allow adding completely new players to started games
             return False
             
+        # Game hasn't started yet, add the player
         if user_id not in self.players:
             self.players[user_id] = {
                 "name": username,
                 "choice": None
             }
             return True
-        return False
+        # Player already exists but we'll count it as success
+        return True
             
     def remove_player(self, user_id: int) -> bool:
         """Remove a player from the game. Returns True if player was removed."""
@@ -44,7 +56,12 @@ class MultiplayerGame:
         """Start the game if there are at least 2 players"""
         if len(self.players) >= 2 and not self.started:
             self.started = True
+            self.start_time = time.time()
             return True
+        return False
+            
+    def is_timer_expired(self) -> bool:
+        """Check if the game timer has expired - always returns False since we removed timers"""
         return False
             
     def make_choice(self, user_id: int, choice: str) -> bool:
@@ -132,11 +149,15 @@ class GameManager:
         # Maps user_id -> set of chat_ids (to track which games a user is in)
         self.user_games: Dict[int, Set[int]] = {}
         
-    def create_game(self, chat_id: int, user_id: int, username: str) -> MultiplayerGame:
-        """Create a new game in a chat. Returns the game object."""
+    def create_game(self, chat_id: int, user_id: int, username: str) -> Optional[MultiplayerGame]:
+        """Create a new game in a chat. Returns the game object or None if creation fails."""
         # If there's already a game in this chat, return None
         if chat_id in self.games:
-            return None
+            logger.warning(f"Game already exists in chat {chat_id}")
+            return self.games[chat_id]  # Return existing game instead of None
+            
+        # End all other games this user might be in
+        self.remove_user_from_all_games(user_id)
             
         game = MultiplayerGame(chat_id, user_id, username)
         game.add_player(user_id, username)  # Creator joins automatically
@@ -150,10 +171,24 @@ class GameManager:
         
         return game
         
+    def remove_user_from_all_games(self, user_id: int) -> None:
+        """Remove a user from all games they're currently in."""
+        if user_id not in self.user_games:
+            return
+            
+        # Copy the set to avoid modifying during iteration
+        chat_ids = list(self.user_games[user_id])
+        
+        for chat_id in chat_ids:
+            self.leave_game(chat_id, user_id)
+        
     def join_game(self, chat_id: int, user_id: int, username: str) -> Tuple[bool, Optional[MultiplayerGame]]:
         """Join an existing game. Returns (success, game)."""
         if chat_id not in self.games:
             return False, None
+        
+        # First remove user from any other games they might be in
+        self.remove_user_from_all_games(user_id)
             
         game = self.games[chat_id]
         success = game.add_player(user_id, username)

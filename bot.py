@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 
 from game import play_game, get_result_message
-from stats import get_user_stats, update_user_stats
+from stats import get_user_stats, update_user_stats, find_user_by_username, get_all_players, user_stats
 from game_manager import get_game_manager
 from responses import (
     START_MESSAGE, HELP_MESSAGE, 
@@ -20,7 +20,7 @@ from responses import (
     game_started_message, not_enough_players_message,
     not_creator_message, successfully_left_message,
     not_in_game_message, game_already_started_message,
-    choose_move_message
+    choose_move_message, player_not_found_message, multiple_matches_message
 )
 
 # Get token from environment variable
@@ -190,12 +190,63 @@ async def show_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user stats when the command /stats is issued."""
     user_id = update.effective_user.id
-    stats = get_user_stats(user_id)
+    mode = None
     
-    await update.message.reply_text(
-        stats_message(stats),
-        parse_mode="HTML"
-    )
+    # Get the targeted username if provided
+    if context.args:
+        # User wants to see someone else's stats
+        username = ' '.join(context.args)
+        
+        # Check if they want to see specific mode stats
+        if username.lower().endswith(' solo'):
+            # Solo mode stats requested
+            username = username[:-5].strip()
+            mode = 'solo'
+        elif username.lower().endswith(' multiplayer'):
+            # Multiplayer mode stats requested
+            username = username[:-12].strip()
+            mode = 'multiplayer'
+        
+        # Find the user ID from username
+        found_user_id, found_username = find_user_by_username(username)
+        
+        if found_user_id:
+            # Check if the username has "(multiple matches found)" suffix
+            if "multiple matches found" in found_username:
+                # There are multiple matches, find them all
+                matches = []
+                search_term = username.lower()
+                for uid, stats in user_stats.items():
+                    stored_username = stats.get('username', '').lower()
+                    if search_term in stored_username:
+                        matches.append((uid, stats['username']))
+                
+                # Show the list of matching users
+                await update.message.reply_text(
+                    multiple_matches_message(matches),
+                    parse_mode="HTML"
+                )
+                return
+            
+            # Show stats for the found user
+            stats = get_user_stats(found_user_id, mode)
+            await update.message.reply_text(
+                stats_message(stats, mode),
+                parse_mode="HTML"
+            )
+        else:
+            # User not found
+            await update.message.reply_text(
+                player_not_found_message(username),
+                parse_mode="HTML"
+            )
+    else:
+        # Show requester's own stats
+        stats = get_user_stats(user_id, mode)
+        await update.message.reply_text(
+            stats_message(stats, mode),
+            parse_mode="HTML"
+        )
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel and end the conversation."""
@@ -225,14 +276,6 @@ async def multiplayer_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return ConversationHandler.END
     
-    # Check if the user is already in a game in another chat
-    if game_manager.is_user_in_game(user_id):
-        await update.message.reply_text(
-            player_already_in_game_message(),
-            parse_mode="HTML"
-        )
-        return ConversationHandler.END
-    
     # Create a new multiplayer game
     game = game_manager.create_game(chat_id, user_id, username)
     
@@ -243,14 +286,19 @@ async def multiplayer_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     
     # Store the message ID for updates
-    game.message_id = message.message_id
+    if game is not None and message is not None:
+        game.message_id = message.message_id
     
     # Send game status
-    await context.bot.send_message(
+    status_msg = await context.bot.send_message(
         chat_id=chat_id,
         text=multiplayer_game_status(game),
         parse_mode="HTML"
     )
+    
+    # Store the status message ID for updates
+    if game is not None and status_msg is not None:
+        game.group_message_id = status_msg.message_id
     
     return ConversationHandler.END
 
@@ -261,32 +309,123 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or update.effective_user.first_name
     
     # Check if there's a game in this chat
-    if not game_manager.get_game(chat_id):
+    game = game_manager.get_game(chat_id)
+    if not game:
         await update.message.reply_text(
             no_game_in_chat_message(),
             parse_mode="HTML"
         )
         return ConversationHandler.END
     
-    # Check if the user is already in a game
-    if game_manager.is_user_in_game(user_id):
-        in_this_chat = game_manager.is_user_in_game(user_id, chat_id)
+    # Check if the game has already started
+    if game.started:
         await update.message.reply_text(
-            player_already_in_game_message(is_group=in_this_chat),
+            game_already_started_message(),
             parse_mode="HTML"
         )
         return ConversationHandler.END
+    
+    # If the user is already in this game, just confirm it
+    if game_manager.is_user_in_game(user_id, chat_id):
+        await update.message.reply_text(
+            f"✓ <b>ALREADY ENLISTED!</b> You're already part of this epic battle, {username}!",
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
+        
+    # If the user is in other games, they'll be automatically removed due to the one-game-per-user rule
+    if game_manager.is_user_in_game(user_id):
+        await update.message.reply_text(
+            f"⚠️ <b>ATTENTION WARRIOR!</b> You were in another battle, but have been withdrawn from it to join this epic contest!",
+            parse_mode="HTML"
+        )
     
     # Join the game
     success, game = game_manager.join_game(chat_id, user_id, username)
     
     if success and game:
-        # Send updated game status
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=multiplayer_game_status(game),
+        # Send confirmation message
+        await update.message.reply_text(
+            f"🎭 <b>JOINED THE BATTLE!</b> {username} has entered the arena! Prepare for glory!",
             parse_mode="HTML"
         )
+        
+        # Auto-start the game if we have at least 2 players
+        if len(game.players) >= 2 and not game.started:
+            # Start the game automatically
+            success, game = game_manager.start_game(chat_id)
+            
+            if success:
+                # Notify that the game has started
+                status_msg = await update.message.reply_text(
+                    game_started_message(),
+                    parse_mode="HTML"
+                )
+                
+                # Store the status message ID
+                if game is not None and status_msg is not None:
+                    game.group_message_id = status_msg.message_id
+                
+                # Send individual messages to each player to make their choices
+                for player_id, player_data in game.players.items():
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("Rock 🪨", callback_data=f"mp_rock_{chat_id}"),
+                            InlineKeyboardButton("Paper 📄", callback_data=f"mp_paper_{chat_id}"),
+                            InlineKeyboardButton("Scissors ✂️", callback_data=f"mp_scissors_{chat_id}"),
+                        ]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    try:
+                        await context.bot.send_message(
+                            chat_id=player_id,
+                            text=choose_move_message(),
+                            reply_markup=reply_markup,
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Error sending message to player {player_id}: {e}")
+                        # Let the group know that a player might not have received their choice buttons
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"⚠️ <b>WARNING:</b> Could not send choice message to {player_data['name']}. They may need to start the bot in private chat first.",
+                            parse_mode="HTML"
+                        )
+                
+                # Send updated game status
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=multiplayer_game_status(game),
+                    parse_mode="HTML"
+                )
+            return ConversationHandler.END
+                
+        # If the game didn't auto-start, just update status
+        try:
+            if game is not None and hasattr(game, 'group_message_id') and game.group_message_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=game.group_message_id,
+                    text=multiplayer_game_status(game),
+                    parse_mode="HTML"
+                )
+            else:
+                status_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=multiplayer_game_status(game),
+                    parse_mode="HTML"
+                )
+                if game is not None and status_msg is not None:
+                    game.group_message_id = status_msg.message_id
+        except Exception as e:
+            logger.error(f"Error updating game status: {e}")
+            # If editing fails, send a new message
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=multiplayer_game_status(game),
+                parse_mode="HTML"
+            )
     
     return ConversationHandler.END
 
@@ -325,10 +464,14 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     if success:
         # Notify that the game has started
-        await update.message.reply_text(
+        status_msg = await update.message.reply_text(
             game_started_message(),
             parse_mode="HTML"
         )
+        
+        # Store the status message ID
+        if game is not None and status_msg is not None:
+            game.group_message_id = status_msg.message_id
         
         # Send individual messages to each player to make their choices
         for player_id, player_data in game.players.items():
@@ -350,6 +493,12 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
             except Exception as e:
                 logger.error(f"Error sending message to player {player_id}: {e}")
+                # Let the group know that a player might not have received their choice buttons
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ <b>WARNING:</b> Could not send choice message to {player_data['name']}. They may need to start the bot in private chat first.",
+                    parse_mode="HTML"
+                )
         
         # Send updated game status
         await context.bot.send_message(
@@ -422,6 +571,7 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
     choice = parts[1]
     chat_id = int(parts[2])
     user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name
     
     # Check if there's a game in this chat
     game = game_manager.get_game(chat_id)
@@ -432,13 +582,25 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
         )
         return
     
-    # Check if the user is in the game
+    # Check if the user is in the game - if not, try to join them (handle bot not started in private)
     if not game_manager.is_user_in_game(user_id, chat_id):
-        await query.edit_message_text(
-            "⚠️ <b>NOT IN BATTLE!</b> You are not part of this epic contest!",
-            parse_mode="HTML"
-        )
-        return
+        # Try to add user to player list (game already started)
+        if user_id in game.players:
+            # User exists but maybe wasn't properly tracked
+            if user_id not in game_manager.user_games:
+                game_manager.user_games[user_id] = set([chat_id])
+            else:
+                game_manager.user_games[user_id].add(chat_id)
+        else:
+            # User not in this game at all - they can't join now
+            await query.edit_message_text(
+                "⚠️ <b>NOT IN BATTLE!</b> You are not part of this epic contest!",
+                parse_mode="HTML"
+            )
+            return
+    
+    # We removed timer expiry logic since we're eliminating timers
+    # Timer check is now a no-op that always returns false due to our changes
     
     # Record the player's choice
     success, game, all_chosen = game_manager.make_choice(chat_id, user_id, choice)
@@ -473,12 +635,32 @@ async def multiplayer_choice_callback(update: Update, context: ContextTypes.DEFA
             # End the game
             game_manager.end_game(chat_id)
         else:
-            # Update the game status in the group
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=multiplayer_game_status(game),
-                parse_mode="HTML"
-            )
+            # Update the game status in the group by editing the status message
+            try:
+                if game is not None and hasattr(game, 'group_message_id') and game.group_message_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=game.group_message_id,
+                        text=multiplayer_game_status(game),
+                        parse_mode="HTML"
+                    )
+                else:
+                    # If no stored message ID, send a new message
+                    status_msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=multiplayer_game_status(game),
+                        parse_mode="HTML"
+                    )
+                    if game is not None and status_msg is not None:
+                        game.group_message_id = status_msg.message_id
+            except Exception as e:
+                logger.error(f"Error updating game status: {e}")
+                # If editing fails, send a new message
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=multiplayer_game_status(game),
+                    parse_mode="HTML"
+                )
     
     return
 
