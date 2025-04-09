@@ -18,7 +18,10 @@ def get_user_stats(user_id):
             'wins': 0,
             'losses': 0,
             'draws': 0,
-            'total_games': 0
+            'total_games': 0,
+            'current_streak': 0,
+            'best_streak': 0,
+            'last_result': None
         }
     
     return user_stats[user_id]
@@ -38,12 +41,30 @@ def update_user_stats(user_id, username, result):
     stats['username'] = username
     stats['total_games'] += 1
     
+    # Update result counts
     if result == "win":
         stats['wins'] += 1
     elif result == "lose":
         stats['losses'] += 1
-    else:
+    else:  # draw
         stats['draws'] += 1
+    
+    # Update streak information
+    if result == "win":
+        if stats['last_result'] == "win":
+            stats['current_streak'] += 1
+        else:
+            stats['current_streak'] = 1
+            
+        # Update best streak if current is better
+        if stats['current_streak'] > stats['best_streak']:
+            stats['best_streak'] = stats['current_streak']
+    else:
+        # Reset streak on non-wins
+        stats['current_streak'] = 0
+        
+    # Store the last result
+    stats['last_result'] = result
         
     # Calculate win percentage
     if stats['total_games'] > 0:

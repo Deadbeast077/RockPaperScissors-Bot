@@ -17,6 +17,11 @@ from responses import (
 # Get token from environment variable
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 
+# Bot Configuration
+# Note: When creating the bot in BotFather, set the following:
+# - Bot name: RockPaperScissors Bot
+# - Bot username: @RPLSLBot
+
 # Set up logging
 logging.basicConfig(level=logging.DEBUG,
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -162,6 +167,9 @@ def start_bot():
     """Start the bot."""
     if not TELEGRAM_TOKEN:
         logger.error("No Telegram token provided. Please set the TELEGRAM_TOKEN environment variable.")
+        logger.info("To create a bot, use BotFather in Telegram and set:")
+        logger.info("- Bot name: RockPaperScissors Bot")
+        logger.info("- Bot username: @RPLSLBot")
         return
     
     # Create application

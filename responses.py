@@ -4,7 +4,7 @@ import random
 START_MESSAGE = """
 Hello, {}! 👋
 
-Welcome to the Rock Paper Scissors Bot! 🎮
+Welcome to the RockPaperScissors Bot (@RPLSLBot)! 🎮
 I'm ready to challenge you to the classic game of Rock, Paper, Scissors.
 
 Type /play to start a game!
@@ -13,7 +13,8 @@ Type /stats to see your game statistics.
 """
 
 HELP_MESSAGE = """
-🎮 *ROCK PAPER SCISSORS* 🎮
+🎮 *ROCKPAPERSCISSORS BOT* 🎮
+(@RPLSLBot)
 
 *Game Rules*:
 🪨 Rock crushes Scissors
@@ -50,6 +51,10 @@ def get_win_message():
         "Victory is yours! 🌟",
         "You're on fire! Great move! 🔥",
         "I bow to your superior skills! 👑",
+        "You're a rock-paper-scissors champion! 🥇",
+        "Incredible strategy! You won! 🧠",
+        "You've got some serious RPS skills! ✨",
+        "I need to step up my game! You win! 🎮",
     ]
     return random.choice(messages)
 
@@ -62,6 +67,10 @@ def get_lose_message():
         "I win this one! Want to try again? 🎯",
         "Gotcha! But don't give up! 🌈",
         "Not your round, but keep trying! 🚀",
+        "The RPS gods smiled on me this time! ⚡",
+        "I've been practicing my RPS skills! 🏋️‍♂️",
+        "My victory dance is happening right now! 💃",
+        "I win this round! Rematch? 🔄",
     ]
     return random.choice(messages)
 
@@ -74,6 +83,10 @@ def get_draw_message():
         "We're evenly matched! It's a draw! 🎯",
         "No winner this time! Let's keep going! 🏁",
         "A perfect standoff! It's a draw! ⚖️",
+        "Wow, we're in sync! Draw! 🧩",
+        "A draw! The tension builds! 🎬",
+        "Neither of us takes the win! Try again? 🎪",
+        "Epic minds think alike! It's a tie! 🎪",
     ]
     return random.choice(messages)
 
@@ -94,16 +107,31 @@ def stats_message(stats):
     draws = stats.get('draws', 0)
     total_games = stats.get('total_games', 0)
     win_percentage = stats.get('win_percentage', 0.0)
+    current_streak = stats.get('current_streak', 0)
+    best_streak = stats.get('best_streak', 0)
     
     message = f"<b>🏆 Stats for {username} 🏆</b>\n\n"
     message += f"Games played: {total_games}\n"
     message += f"Wins: {wins} 🎉\n"
     message += f"Losses: {losses} 😔\n"
     message += f"Draws: {draws} 🤝\n"
-    message += f"Win rate: {win_percentage}% 📊\n\n"
+    message += f"Win rate: {win_percentage}% 📊\n"
     
-    # Add a fun comment based on win percentage
-    if win_percentage >= 75:
+    # Add streak information
+    if current_streak > 0:
+        message += f"Current win streak: {current_streak} 🔥\n"
+    
+    if best_streak > 0:
+        message += f"Best win streak: {best_streak} ⭐\n"
+    
+    message += "\n"
+    
+    # Add a fun comment based on stats
+    if current_streak >= 3:
+        message += "You're on fire! Can you keep the streak going? 🔥"
+    elif best_streak >= 5:
+        message += "Wow! That best streak is impressive! 🌟"
+    elif win_percentage >= 75:
         message += "You're a Rock Paper Scissors master! 👑"
     elif win_percentage >= 50:
         message += "You're doing great! Keep it up! 💪"
